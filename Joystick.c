@@ -26,12 +26,19 @@ these buttons for our use.
 
 #include "Joystick.h"
 
-extern const uint8_t image_data[0x12c1] PROGMEM;
+RingBuff_t USARTtoUSB_Buffer;
+USB_JoystickReport_Input_t joyReportI;
+USB_JoystickReport_Output_t joyReportO;
+
 
 // Main entry point.
 int main(void) {
 	// We'll start by performing hardware and peripheral setup.
 	SetupHardware();
+
+	RingBuffer_InitBuffer(&USARTtoUSB_Buffer);
+
+	sei();
 	// We'll then enable global interrupts for our use.
 	GlobalInterruptEnable();
 	// Once that's done, we'll enter an infinite loop.
@@ -54,18 +61,11 @@ void SetupHardware(void) {
 	clock_prescale_set(clock_div_1);
 	// We can then initialize our hardware and peripherals, including the USB stack.
 
-	#ifdef ALERT_WHEN_DONE
-	// Both PORTD and PORTB will be used for the optional LED flashing and buzzer.
-	#warning LED and Buzzer functionality enabled. All pins on both PORTB and \
-PORTD will toggle when printing is done.
-	DDRD  = 0xFF; //Teensy uses PORTD
-	PORTD =  0x0;
-                  //We'll just flash all pins on both ports since the UNO R3
-	DDRB  = 0xFF; //uses PORTB. Micro can use either or, but both give us 2 LEDs
-	PORTB =  0x0; //The ATmega328P on the UNO will be resetting, so unplug it?
-	#endif
 	// The USB stack should be initialized last.
 	USB_Init();
+
+	//Start the thing??????
+	Serial_Init(115200, true);
 }
 
 // Fired to indicate that the device is enumerating.
@@ -128,16 +128,33 @@ void HID_Task(void) {
 	if (Endpoint_IsINReady())
 	{
 		// We'll create an empty report.
-		USB_JoystickReport_Input_t JoystickInputData;
+		//USB_JoystickReport_Input_t JoystickInputData;
 		// We'll then populate this report with what we want to send to the host.
-		GetNextReport(&JoystickInputData);
+		//GetNextReport(&JoystickInputData);
+
+		RingBuff_Count_t BufferCount = RingBuffer_GetCount(&USARTtoUSB_Buffer);
+
+		/* If there's a new report from the Arduino, copy it in and send that.
+		* If not then the last report is sent again.
+		*/
+		if (BufferCount >= sizeof(joyReportI)) 
+		{
+			uint8_t ind;
+			for (ind=0; ind<sizeof(joyReportI); ind++) 
+			{
+				((uint8_t *)&joyReportI)[ind] = RingBuffer_Remove(&USARTtoUSB_Buffer);
+			}
+		}
+
 		// Once populated, we can output this data to the host. We do this by first writing the data to the control stream.
-		while(Endpoint_Write_Stream_LE(&JoystickInputData, sizeof(JoystickInputData), NULL) != ENDPOINT_RWSTREAM_NoError);
+		while(Endpoint_Write_Stream_LE(&joyReportI, sizeof(joyReportI), NULL) != ENDPOINT_RWSTREAM_NoError);
+		
 		// We then send an IN packet on this endpoint.
 		Endpoint_ClearIN();
 	}
 }
 
+/*
 typedef enum {
 	SYNC_CONTROLLER,
 	SYNC_POSITION,
@@ -152,15 +169,12 @@ State_t state = SYNC_CONTROLLER;
 #define ECHOES 2
 int echoes = 0;
 USB_JoystickReport_Input_t last_report;
-
-int report_count = 0;
-int xpos = 0;
-int ypos = 0;
-int portsval = 0;
+*/
 
 // Prepare the next report for the host.
-void GetNextReport(USB_JoystickReport_Input_t* const ReportData) {
-
+void GetNextReport(USB_JoystickReport_Input_t* const ReportData) 
+{
+/*
 	// Prepare an empty report
 	memset(ReportData, 0, sizeof(USB_JoystickReport_Input_t));
 	ReportData->LX = STICK_CENTER;
@@ -176,7 +190,6 @@ void GetNextReport(USB_JoystickReport_Input_t* const ReportData) {
 		echoes--;
 		return;
 	}
-
 	// States and moves management
 	switch (state)
 	{
@@ -258,12 +271,12 @@ void GetNextReport(USB_JoystickReport_Input_t* const ReportData) {
 	}
 
 	// Inking
-	if (state != SYNC_CONTROLLER && state != SYNC_POSITION)
-		if (pgm_read_byte(&(image_data[(xpos / 8) + (ypos * 40)])) & 1 << (xpos % 8))
-			ReportData->Button |= SWITCH_A;
+	//if (state != SYNC_CONTROLLER && state != SYNC_POSITION)
+		//if (pgm_read_byte(&(image_data[(xpos / 8) + (ypos * 40)])) & 1 << (xpos % 8))
+			//ReportData->Button |= SWITCH_A;
 
 	// Prepare to echo this report
 	memcpy(&last_report, ReportData, sizeof(USB_JoystickReport_Input_t));
 	echoes = ECHOES;
-
+*/
 }
